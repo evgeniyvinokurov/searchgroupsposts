@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Рекомендательная система</title>
+</head>
+<body>
+  <h1>Ваши рекомендации</h1>
+  <form id="criteriaForm">
+    <label><input type="checkbox" name="topic" value="технологии"> Технологии</label><br>
+    <label><input type="checkbox" name="topic" value="спорт"> Спорт</label><br>
+    <label><input type="checkbox" name="topic" value="культура"> Культура</label><br>
+    <button type="submit">Получить рекомендации</button>
+  </form>
+  <div id="recsContainer"></div>
+
+  <script>
+    document.getElementById('criteriaForm').onsubmit = async function(e) {
+      e.preventDefault();
+      const topics = Array.from(this.elements.topic)
+        .filter(box => box.checked)
+        .map(box => box.value);
+      const response = await fetch('http://127.0.0.1:5000/api/v1/recommend', {
+        method: 'GET',
+        headers: {'Content-Type': 'application/json'},
+      });
+      const data = await response.json();
+      const container = document.getElementById('recsContainer');
+      container.innerHTML = '';
+      if (!data.recommendations || data.recommendations.length === 0) {
+        container.innerHTML = '<p>Нет рекомендаций.</p>';
+        return;
+      }
+      data.recommendations.forEach(item => {
+        const div = document.createElement('div');
+        div.innerHTML = `<a href="${item.url}" target="_blank"><strong>${item.title}</strong></a><br>${item.desc}`;
+        container.appendChild(div);
+      });
+    };
+  </script>
+</body>
+</html>
