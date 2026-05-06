@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VK Mini App - Search</title>
+    <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
+    <style>
+        body { font-family: sans-serif; padding: 20px; line-height: 1.5; }
+        .group-card { border: 1px solid #ddd; padding: 10px; margin-bottom: 10px; border-radius: 8px; }
+        .post-text { background: #f9f9f9; padding: 5px; font-size: 0.9em; color: #333; }
+        input { padding: 8px; width: 200px; }
+        button { padding: 8px 15px; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <h1>Поиск постов в группах</h1>
+    
+    <input type="text" id="queryInput" placeholder="Введите интерес (н-р, Python)">
+    <button id="searchBtn">Найти и вывести 5 случайных</button>
+    
+    <div id="status">Инициализация...</div>
+    <div id="results"></div>
+
+    <script>
+        let USER_TOKEN = "";
+        const APP_ID = 54575895; // Ваш ID
+
+        // 1. Инициализация Bridge
+        vkBridge.send("VKWebAppInit");
+
+        // 2. Функция получения токена (вызываем один раз при старте)
+        async function authenticate() {
+            try {
+                const data = await vkBridge.send("VKWebAppGetAuthToken", {
+                    "app_id": APP_ID,
+                    "scope": "groups,wall" 
+                });
+                USER_TOKEN = data.access_token;
+                document.getElementById('status').innerText = "Готов к работе";
+            } catch (error) {
+                document.getElementById('status').innerText = "Ошибка авторизации: " + error.error_data.error_reason;
+            }
+        }
+
+        // 3. Поиск и вывод
+        async function startSearch() {
+            const query = document.getElementById('queryInput').value;
+            if (!USER_TOKEN) return alert("Сначала нужно получить доступ");
+            if (!query) return alert("Введите запрос");
+
+            const resultsDiv = document.getElementById('results');
+            resultsDiv.innerHTML = "Поиск...";
+
+            try {
+                // Ищем сообщества
+                let searchRes = await vkBridge.send("VKWebAppCallAPIMethod", {
+                    "method": "groups.search",
+                    "params": {
+                        "q": query,
+                        "count": 30, // берем с запасом для рандома
+                        "access_token": USER_TOKEN,
+                        "v": "5.199"
+                    }
+                });
+                                
+				searchRes = searchRes.response;
+                let items = searchRes.items;
+                if (!items || items.length === 0) {
+                    resultsDiv.innerHTML = "Ничего не найдено";
+                    return;
+                }
+
+                // Перемешиваем и берем 5 случайных
+                items = items.sort(() => 0.5 - Math.random()).slice(0, 5);
+                
+                resultsDiv.innerHTML = ""; // Очищаем для вывода
+
+                for (let group of items) {
+                    const postText = await getLastPost(group.id);
+                    
+                    const card = document.createElement('div');
+                    card.className = 'group-card';
+                    card.innerHTML = `
+                        <strong>${group.name}</strong> (id: ${group.id})<br>
+                        <a href="https://vk.com{group.screen_name}" target="_blank">Перейти в группу</a>
+                        <div class="post-text">Последний пост: ${postText}</div>
+                    `;
+                    resultsDiv.appendChild(card);
+                }
+
+            } catch (error) {
+                console.error(error);
+                resultsDiv.innerHTML = "Ошибка API: " + JSON.stringify(error);
+            }
+        }
+
+        async function getLastPost(groupId) {
+            try {
+                const ownerId = -Math.abs(groupId); // Всегда отрицательный для групп
+                let res = await vkBridge.send("VKWebAppCallAPIMethod", {
+                    "method": "wall.get",
+                    "params": {
+                        "owner_id": ownerId,
+                        "count": 1,
+                        "access_token": USER_TOKEN,
+                        "v": "5.199"
+                    }
+                });
+                return res.response.items[0]?.text || "[Текст отсутствует или только фото]";
+            } catch (e) {
+                return "[Ошибка доступа к стене]";
+            }
+        }
+
+        // Навешиваем события
+        document.getElementById('searchBtn').onclick = startSearch;
+        
+        // Запускаем авторизацию сразу
+        authenticate();
+    </script>
+</body>
+</html>
+
